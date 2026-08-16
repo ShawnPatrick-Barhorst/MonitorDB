@@ -1,0 +1,50 @@
+# --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- SQLite & Database Storage ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- Go Binaries & Artifacts ---
+/bin/
+/dist/
+/monitordb-bin
+*.exe
+*.test
+*.out
+
+# --- Python & UV ---
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Logs & System ---
+*.log
+.DS_Store
+Thumbs.db
+
+# --- Editor / IDE ---
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.swp
+*.swo
+*~
+
+# --- Temp Test Server ---
+test_server/
