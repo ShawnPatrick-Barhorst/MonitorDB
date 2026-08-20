@@ -1,0 +1,14 @@
+[Unit]
+Description=MonitorDB webhook listener
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/MonitorDB
+ExecStart=/path/to/uv run uvicorn monitordb.server:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

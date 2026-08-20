@@ -1,0 +1,18 @@
+{
+  "user_id": 1,
+  "is_active": 1,
+  "profile": {
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "gender": "female",
+    "date_of_birth": 946702800,
+    "height_cm": 170,
+    "weight_lb": 150,
+    "prescriptions": "None",
+    "profession": "Software Engineer",
+    "relationship_status": "single",
+    "sexual_orientation": "prefer not to say",
+    "nationality": "US",
+    "address": "123 Example St"
+  }
+}
