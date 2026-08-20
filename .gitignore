@@ -48,3 +48,11 @@ Thumbs.db
 
 # --- Temp Test Server ---
 test_server/
+
+# --- Deprecated stuff ---
+monitordb_old/
+
+# --- User Information ---
+user.json
+deploy/monitordb.service
+deploy/Caddyfile

@@ -1,12 +1,10 @@
 import argparse
+import asyncio
 
 from dotenv import load_dotenv
 
-from monitordb.io_sockets import (
-    GeminiEngine,
-    run_interactive_repl,
-    run_json_stdio,
-)
+from monitordb.llm.agent import build_agent
+from monitordb.llm.io_sockets import run_json_stdio
 
 load_dotenv()
 
@@ -20,12 +18,12 @@ def main():
     )
     args = parser.parse_args()
 
-    engine = GeminiEngine()
+    agent = build_agent("google:gemini-3.5-flash")
 
     if args.json:
-        run_json_stdio(engine)
-    else:
-        run_interactive_repl(engine)
+        asyncio.run(run_json_stdio(agent))
+    # else:
+    #     asyncio.run(run_interactive_repl(agent))
 
 
 if __name__ == "__main__":

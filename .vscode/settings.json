@@ -1,0 +1,11 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "user_monitor",
+            "database": "${workspaceFolder:MonitorDB}/database/user_monitor.db"
+        }
+    ],
+    "sqltools.useNodeRuntime": true
+}
