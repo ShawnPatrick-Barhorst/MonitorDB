@@ -56,3 +56,6 @@ monitordb_old/
 user.json
 deploy/monitordb.service
 deploy/Caddyfile
+
+# --- Health Connect Payload ---
+health_connect_payload.json

@@ -1,0 +1,67 @@
+{
+  "document": {
+    "margin": 0
+  },
+  "paragraph": {
+    "margin": 0
+  },
+  "block_quote": {
+    "color": "8",
+    "italic": true,
+    "indent": 1,
+    "indent_token": "│ "
+  },
+  "heading": {
+    "bold": true
+  },
+  "h1": {
+    "prefix": "█ ",
+    "color": "14",
+    "bold": true
+  },
+  "h2": {
+    "prefix": "## ",
+    "color": "12",
+    "bold": true
+  },
+  "h3": {
+    "prefix": "### ",
+    "color": "6"
+  },
+  "list": {
+    "level_indent": 2,
+    "margin": 0
+  },
+  "item": {
+    "prefix": "• ",
+    "margin": 0
+  },
+  "enumeration": {
+    "prefix": "",
+    "suffix": ". ",
+    "margin": 0
+  },
+  "strong": {
+    "bold": true,
+    "color": "15"
+  },
+  "emph": {
+    "italic": true,
+    "color": "7"
+  },
+  "code": {
+    "color": "11"
+  },
+  "code_block": {
+    "color": "10",
+    "margin": 0
+  },
+  "link": {
+    "color": "12",
+    "underline": true
+  },
+  "link_text": {
+    "color": "14",
+    "bold": true
+  }
+}
