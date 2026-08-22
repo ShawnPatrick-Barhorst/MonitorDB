@@ -173,3 +173,57 @@ def get_nutrition_summary(
         }
         for row in report
     ]
+
+
+@health_connect_mcp.tool
+def get_steps_summary(
+    user_id: int, start_datetime: datetime, end_datetime: datetime
+) -> list[dict[str, Any]]:
+    """
+    Retrieve daily step counts for a specific user within a date range.
+
+    Args:
+        user_id: The unique integer ID of the user.
+        start_datetime: Inclusive start time in ISO 8601 format (e.g., '2026-08-15T00:00:00-04:00').
+        end_datetime: Exclusive end time in ISO 8601 format (e.g., '2026-08-22T00:00:00-04:00').
+
+    Returns:
+        A list of daily records, ordered chronologically:
+        [
+            {"date": "2026-08-15", "count": 1916},
+            {"date": "2026-08-16", "count": 4250}
+        ]
+    """
+
+    if start_datetime.tzinfo is None:
+        start_datetime = start_datetime.replace(tzinfo=TZ)
+    if end_datetime.tzinfo is None:
+        end_datetime = end_datetime.replace(tzinfo=TZ)
+
+    start_epoch = int(start_datetime.timestamp())
+    end_epoch = int(end_datetime.timestamp())
+
+    conn = build_conn(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    try:
+        report = conn.execute(
+            """
+            SELECT user_id, start_epoch, end_epoch, count 
+            FROM step_logs
+            WHERE user_id = ? AND start_epoch BETWEEN ? AND ?
+        """,
+            (user_id, start_epoch, end_epoch),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        {
+            "date": datetime.fromtimestamp(row["start_epoch"], tz=TZ)
+            .date()
+            .isoformat(),
+            "count": row["count"],
+        }
+        for row in report
+    ]
