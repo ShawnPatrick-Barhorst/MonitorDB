@@ -11,6 +11,7 @@ def init_tables(url: str):
     build_calendar_events_table(conn)
     build_heart_rate_log(conn)
     build_sleep_log(conn)
+    build_nutrition_log(conn)
 
 
 def build_user_table(conn: sqlite3.Connection):
@@ -233,13 +234,28 @@ def build_sleep_log(conn: sqlite3.Connection):
     conn.commit()
 
 
-def build_intake_log(conn: sqlite3.Connection):
-    return
+def build_nutrition_log(conn: sqlite3):
 
+    cur = conn.cursor()
 
-def build_fitness_log(conn: sqlite3.Connection):
-    return
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS nutrition_logs(
+            user_id INTEGER NOT NULL,
+            meal_name TEXT,
+            calories REAL,
+            protein_grams REAL,
+            carbs_grams REAL,
+            fat_grams REAL,
+            sugar_grams REAL,
+            sodium_grams REAL,
+            dietary_fiber_grams REAL,
+            start_epoch INT,
+            end_epoch INT,
 
-
-def build_banking_log(conn: sqlite3.Connection):
-    return
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+            UNIQUE(user_id, start_epoch)
+        );
+        """
+    )
+    conn.commit()

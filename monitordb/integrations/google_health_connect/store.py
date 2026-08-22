@@ -1,10 +1,14 @@
 import sqlite3
 
 from monitordb.integrations.google_health_connect.models import (
+    HeartRateItem,
+    NutritionLogItem,
     SleepSessionItem,
 )
+from monitordb.logging_utils import logged
 
 
+@logged
 def update_sleep_logs(
     conn: sqlite3.Connection, user_id: int, sleep_session_items: list[SleepSessionItem]
 ) -> dict[str, int]:
@@ -58,4 +62,69 @@ def update_sleep_logs(
             stage_rows,
         )
 
-    return {"status": "success"}
+    return {"status": "success", "count": len(sleep_session_items)}
+
+
+@logged
+def update_heart_rate_logs(
+    conn: sqlite3.Connection, user_id: int, heart_rate_items: list[HeartRateItem]
+) -> dict[str, int]:
+    cur = conn.cursor()
+    for heart_rate_record in heart_rate_items:
+        record_epoch = int(heart_rate_record.time.timestamp())
+
+        cur.execute(
+            """
+            INSERT INTO heart_rate_log (user_id, record_epoch, bpm)
+            VALUES(?, ?, ?)
+            ON CONFLICT(user_id, record_epoch) DO UPDATE SET
+                bpm = excluded.bpm
+            RETURNING record_epoch
+        """,
+            (user_id, record_epoch, heart_rate_record.bpm),
+        )
+
+    return {"status": "success", "count": len(heart_rate_items)}
+
+
+@logged
+def update_nutrition_log(
+    conn: sqlite3.Connection, user_id: int, nutrition_log_items: list[NutritionLogItem]
+) -> dict[str, int]:
+
+    cur = conn.cursor()
+    for nutrition_log in nutrition_log_items:
+        start_epoch = int(nutrition_log.start_time.timestamp())
+        end_epoch = int(nutrition_log.end_time.timestamp())
+
+        cur.execute(
+            """
+        INSERT INTO nutrition_logs (user_id, calories, protein_grams, carbs_grams, fat_grams, sugar_grams, sodium_grams, dietary_fiber_grams, meal_name, start_epoch, end_epoch)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, start_epoch) DO UPDATE SET
+            calories = excluded.calories,
+            protein_grams = excluded.protein_grams,
+            carbs_grams = excluded.carbs_grams,
+            fat_grams = excluded.fat_grams,
+            sugar_grams = excluded.sugar_grams,
+            sodium_grams = excluded.sodium_grams,
+            dietary_fiber_grams = excluded.dietary_fiber_grams,
+            meal_name = excluded.meal_name,
+            end_epoch = excluded.end_epoch
+        """,
+            (
+                user_id,
+                float(nutrition_log.calories),
+                float(nutrition_log.protein_grams),
+                float(nutrition_log.carbs_grams),
+                float(nutrition_log.fat_grams),
+                float(nutrition_log.sugar_grams),
+                float(nutrition_log.sodium_grams),
+                float(nutrition_log.dietary_fiber_grams),
+                nutrition_log.name,
+                start_epoch,
+                end_epoch,
+            ),
+        )
+
+    return {"status": "success", "count": len(nutrition_log_items)}

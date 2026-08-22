@@ -165,7 +165,7 @@ func NewModel() model {
 
 	ta := textarea.New()
 	ta.Focus()
-	ta.CharLimit = 256
+	ta.CharLimit = 512
 	ta.SetWidth(50)
 	ta.SetHeight(5)
 

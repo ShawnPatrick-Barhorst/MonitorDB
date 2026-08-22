@@ -1,6 +1,9 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import AfterValidator, BaseModel, ConfigDict, computed_field
+
+Decimal3 = Annotated[float, AfterValidator(lambda x: round(x, 3))]
 
 SLEEP_STAGE_MAP = {
     0: "Unknown",
@@ -40,6 +43,21 @@ class HeartRateItem(BaseModel):
 
     bpm: int
     time: datetime
+
+
+class NutritionLogItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    calories: Decimal3
+    protein_grams: Decimal3
+    carbs_grams: Decimal3
+    fat_grams: Decimal3
+    sugar_grams: Decimal3
+    sodium_grams: Decimal3
+    dietary_fiber_grams: Decimal3
+    name: str
+    start_time: datetime
+    end_time: datetime
 
 
 class StepsItem(BaseModel):
