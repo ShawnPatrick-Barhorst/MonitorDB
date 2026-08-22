@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -18,6 +19,7 @@ type model struct {
 	textarea      textarea.Model
 	history       []string
 	terminalWidth int
+	renderer      *glamour.TermRenderer
 
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
@@ -44,8 +46,16 @@ type responsePayload struct {
 type responseMsg string
 
 var (
-	viewportStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	textareaStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	userBubble = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.ANSIColor(4)).
+			Padding(0, 1)
+
+	userLabel = lipgloss.NewStyle().
+			Bold(true)
+
+	viewportStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.ANSIColor(12)).Padding(1, 2)
+	textareaStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.ANSIColor(12)).Padding(1, 2)
 )
 
 func max(a, b int) int {
@@ -55,15 +65,30 @@ func max(a, b int) int {
 	return b
 }
 
-func renderHistory(width int, history []string) string {
-	historyStyle := lipgloss.NewStyle().Width(width)
+func renderHistory(width int, history []string, renderer *glamour.TermRenderer) string {
 
 	lines := make([]string, 0, len(history))
 	for _, msg := range history {
-		lines = append(lines, msg)
+		if strings.HasPrefix(msg, "You: ") {
+			text := strings.TrimPrefix(msg, "You: ")
+			bubbleText := userLabel.Render("You:") + "\n" + text
+
+			userText := userBubble.Render(bubbleText)
+
+			rightAlignedStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Right)
+			rightAlignedText := rightAlignedStyle.Render(userText)
+
+			lines = append(lines, rightAlignedText)
+		} else {
+			out, err := renderer.Render(msg)
+			if err != nil {
+				out = msg
+			}
+			lines = append(lines, strings.TrimSpace(out))
+		}
 	}
 
-	return historyStyle.Render(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n\n")
 }
 
 func sendPrompt(stdin io.Writer, scanner *bufio.Scanner, text string) tea.Cmd {
@@ -110,6 +135,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		available := msg.Height - vpFrameY - (taFrameY + m.textarea.Height()) - joinGap
 		m.viewport.Height = max(1, available)
 
+		m.renderer, _ = glamour.NewTermRenderer(
+			glamour.WithStandardStyle("dark"),
+			glamour.WithWordWrap(max(10, m.viewport.Width-4)))
+
+		m.viewport.SetContent(renderHistory(m.viewport.Width, m.history, m.renderer))
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
@@ -120,7 +151,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isLoading = true
 			m.textarea.Blur()
 			m.history = append(m.history, "You: "+input)
-			m.viewport.SetContent(renderHistory(m.viewport.Width, m.history))
+			m.viewport.SetContent(renderHistory(m.viewport.Width, m.history, m.renderer))
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
 
@@ -136,8 +167,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case responseMsg:
 		m.isLoading = false
 		m.textarea.Focus()
-		m.history = append(m.history, "Gemini: "+string(msg))
-		m.viewport.SetContent(renderHistory(m.viewport.Width, m.history))
+		m.history = append(m.history, string(msg))
+		m.viewport.SetContent(renderHistory(m.viewport.Width, m.history, m.renderer))
 		m.viewport.GotoBottom()
 		return m, nil
 	}
@@ -173,6 +204,11 @@ func NewModel() model {
 
 	history := []string{}
 
+	r, _ := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(80),
+	)
+
 	return model{
 		viewport: vp,
 		textarea: ta,
@@ -180,6 +216,7 @@ func NewModel() model {
 		cmd:      cmd,
 		stdin:    stdin,
 		scanner:  bufio.NewScanner(stdout),
+		renderer: r,
 	}
 }
 
