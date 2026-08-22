@@ -3,29 +3,71 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+)
+
+const (
+	targetContentWidth = 80
+	minContentWidth    = 40
+)
+
+var (
+	thinkingPhrases = []string{
+		"Inspecting metrics...",
+		"Analyzing database records...",
+		"Synthesizing response...",
+	}
+
+	userBubble = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.ANSIColor(4)).
+			Padding(0, 1)
+
+	userLabel = lipgloss.NewStyle().
+			Bold(true)
+
+	viewportStyle = lipgloss.NewStyle().Padding(1, 2)
+	textareaStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.ANSIColor(12)).Padding(1, 2)
+
+	thinkingStyle = lipgloss.NewStyle().
+			Italic(true).
+			Foreground(lipgloss.ANSIColor(8))
+
+	BrailleWave = spinner.Spinner{
+		Frames: []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"},
+		FPS:    time.Second / 12,
+	}
 )
 
 type model struct {
-	viewport      viewport.Model
-	textarea      textarea.Model
-	history       []string
-	terminalWidth int
-	renderer      *glamour.TermRenderer
+	viewport       viewport.Model
+	textarea       textarea.Model
+	history        []string
+	terminalWidth  int
+	terminalHeight int
+	renderer       *glamour.TermRenderer
+	renderer_style []byte
 
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	scanner *bufio.Scanner
 
-	isLoading bool
+	spinner     spinner.Model
+	loadingText string
+	loadingStep int
+	isLoading   bool
 }
 
 type promptPayload struct {
@@ -43,20 +85,16 @@ type responsePayload struct {
 	Content     string `json:"content"`
 }
 
-type responseMsg string
-
-var (
-	userBubble = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.ANSIColor(4)).
-			Padding(0, 1)
-
-	userLabel = lipgloss.NewStyle().
-			Bold(true)
-
-	viewportStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.ANSIColor(12)).Padding(1, 2)
-	textareaStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.ANSIColor(12)).Padding(1, 2)
+type (
+	responseMsg  string
+	cycleTextMsg struct{}
 )
+
+func cycleTextCmd() tea.Cmd {
+	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+		return cycleTextMsg{}
+	})
+}
 
 func max(a, b int) int {
 	if a > b {
@@ -65,20 +103,57 @@ func max(a, b int) int {
 	return b
 }
 
-func renderHistory(width int, history []string, renderer *glamour.TermRenderer) string {
+func (m *model) updateViewportHeight() {
+	if m.terminalHeight == 0 {
+		return
+	}
+	_, vpFrameY := viewportStyle.GetFrameSize()
+	_, taFrameY := textareaStyle.GetFrameSize()
 
-	lines := make([]string, 0, len(history))
+	joinGap := 1
+	available := m.terminalHeight - vpFrameY - (taFrameY + m.textarea.Height()) - joinGap
+	m.viewport.SetHeight(max(1, available))
+}
+
+func (m *model) updateDimensionsWidth() {
+	if m.terminalWidth == 0 {
+		return
+	}
+
+	vpFrameX, _ := viewportStyle.GetFrameSize()
+	taFrameX, _ := textareaStyle.GetFrameSize()
+
+	var containerWidth int
+	if m.terminalWidth >= targetContentWidth {
+		containerWidth = targetContentWidth
+	} else {
+		containerWidth = max(minContentWidth, m.terminalWidth)
+	}
+
+	targetVpWidth := max(1, containerWidth-vpFrameX)
+	m.viewport.SetWidth(targetVpWidth)
+	m.textarea.SetWidth(max(1, containerWidth-taFrameX))
+
+	m.renderer, _ = glamour.NewTermRenderer(
+		glamour.WithStylesFromJSONBytes(m.renderer_style),
+		glamour.WithWordWrap(max(10, targetVpWidth-4)),
+	)
+
+	m.viewport.SetContent(renderHistory(targetVpWidth, m.history, m.renderer, m.isLoading, m.spinner.View(), m.loadingText))
+}
+
+func renderHistory(width int, history []string, renderer *glamour.TermRenderer, isLoading bool, spView string, spText string) string {
+	maxBubbleWidth := max(30, int(float64(width)*0.75))
+	lines := make([]string, 0, len(history)+1)
+
 	for _, msg := range history {
 		if strings.HasPrefix(msg, "You: ") {
 			text := strings.TrimPrefix(msg, "You: ")
 			bubbleText := userLabel.Render("You:") + "\n" + text
-
-			userText := userBubble.Render(bubbleText)
+			userText := userBubble.Width(maxBubbleWidth).Render(bubbleText)
 
 			rightAlignedStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Right)
-			rightAlignedText := rightAlignedStyle.Render(userText)
-
-			lines = append(lines, rightAlignedText)
+			lines = append(lines, rightAlignedStyle.Render(userText))
 		} else {
 			out, err := renderer.Render(msg)
 			if err != nil {
@@ -86,6 +161,11 @@ func renderHistory(width int, history []string, renderer *glamour.TermRenderer) 
 			}
 			lines = append(lines, strings.TrimSpace(out))
 		}
+	}
+
+	if isLoading {
+		indicator := fmt.Sprintf("%s %s", spView, thinkingStyle.Render(spText))
+		lines = append(lines, indicator)
 	}
 
 	return strings.Join(lines, "\n\n")
@@ -106,56 +186,67 @@ func sendPrompt(stdin io.Writer, scanner *bufio.Scanner, text string) tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-
 	var (
 		taCmd tea.Cmd
 		vpCmd tea.Cmd
+		spCmd tea.Cmd
 	)
 
 	if !m.isLoading {
+		prevTaHeight := m.textarea.Height()
 		m.textarea, taCmd = m.textarea.Update(msg)
+		if m.textarea.Height() != prevTaHeight {
+			m.updateViewportHeight()
+		}
 	}
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		if m.isLoading {
+			m.spinner, spCmd = m.spinner.Update(msg)
+			m.viewport.SetContent(renderHistory(m.viewport.Width(), m.history, m.renderer, m.isLoading, m.spinner.View(), m.loadingText))
+			return m, spCmd
+		}
+
+	case cycleTextMsg:
+		if m.isLoading {
+			m.loadingStep = (m.loadingStep + 1) % len(thinkingPhrases)
+			m.loadingText = thinkingPhrases[m.loadingStep]
+			m.viewport.SetContent(renderHistory(m.viewport.Width(), m.history, m.renderer, m.isLoading, m.spinner.View(), m.loadingText))
+			return m, cycleTextCmd()
+		}
 
 	case tea.WindowSizeMsg:
-		vpFrameX, vpFrameY := viewportStyle.GetFrameSize() // x = left+right, y = top+bottom
-		taFrameX, taFrameY := textareaStyle.GetFrameSize() // x = left+right, y = top+bottom
-
-		// Inner widths (content area)
-
-		m.viewport.Width = max(1, msg.Width-vpFrameX)
-		m.textarea.SetWidth(max(1, msg.Width-taFrameX))
-
-		// One row between viewport and textarea due to JoinVertical/newline
-		joinGap := 1
-
-		// Available inner height for viewport content
-		available := msg.Height - vpFrameY - (taFrameY + m.textarea.Height()) - joinGap
-		m.viewport.Height = max(1, available)
-
-		m.renderer, _ = glamour.NewTermRenderer(
-			glamour.WithStandardStyle("dark"),
-			glamour.WithWordWrap(max(10, m.viewport.Width-4)))
-
-		m.viewport.SetContent(renderHistory(m.viewport.Width, m.history, m.renderer))
+		m.terminalHeight = msg.Height
+		m.terminalWidth = msg.Width
+		m.updateDimensionsWidth()
+		m.updateViewportHeight()
+		m.viewport.GotoBottom()
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
 			input := strings.TrimSpace(m.textarea.Value())
-			if input == "" {
+			if input == "" || m.isLoading {
 				return m, nil
 			}
+
 			m.isLoading = true
+			m.loadingStep = 0
+			m.loadingText = thinkingPhrases[0]
 			m.textarea.Blur()
 			m.history = append(m.history, "You: "+input)
-			m.viewport.SetContent(renderHistory(m.viewport.Width, m.history, m.renderer))
+			m.viewport.SetContent(renderHistory(m.viewport.Width(), m.history, m.renderer, m.isLoading, m.spinner.View(), m.loadingText))
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
+			m.updateViewportHeight()
 
-			return m, sendPrompt(m.stdin, m.scanner, input)
+			return m, tea.Batch(
+				sendPrompt(m.stdin, m.scanner, input),
+				m.spinner.Tick,
+				cycleTextCmd(),
+			)
 
 		case "ctrl+c", "esc":
 			if m.cmd != nil && m.cmd.Process != nil {
@@ -168,7 +259,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		m.textarea.Focus()
 		m.history = append(m.history, string(msg))
-		m.viewport.SetContent(renderHistory(m.viewport.Width, m.history, m.renderer))
+		m.viewport.SetContent(renderHistory(m.viewport.Width(), m.history, m.renderer, m.isLoading, m.spinner.View(), m.loadingText))
 		m.viewport.GotoBottom()
 		return m, nil
 	}
@@ -176,12 +267,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(taCmd, vpCmd)
 }
 
-func (m model) View() string {
-
-	return lipgloss.JoinVertical(lipgloss.Top,
+func (m model) View() tea.View {
+	content := lipgloss.JoinVertical(lipgloss.Top,
 		viewportStyle.Render(m.viewport.View()),
 		textareaStyle.Render(m.textarea.View()),
 	)
+
+	centered := lipgloss.PlaceHorizontal(
+		m.terminalWidth,
+		lipgloss.Center,
+		content,
+	)
+
+	v := tea.NewView(centered)
+	v.AltScreen = true
+	return v
 }
 
 func (m model) Init() tea.Cmd {
@@ -195,36 +295,46 @@ func NewModel() model {
 	_ = cmd.Start()
 
 	ta := textarea.New()
+	ta.DynamicHeight = true
+	ta.MinHeight = 1
+	ta.MaxHeight = 8
+	ta.MaxContentHeight = 15
 	ta.Focus()
-	ta.CharLimit = 512
-	ta.SetWidth(50)
-	ta.SetHeight(5)
 
-	vp := viewport.New(50, 10)
+	vp := viewport.New(viewport.WithWidth(50), viewport.WithHeight(10))
 
-	history := []string{}
+	ansiGlamourStyle, err := os.ReadFile("cmd/tui/ansiGlamourStyle.json")
+	if err != nil {
+		panic(fmt.Sprintf("Glamour style sheet not found."))
+	}
 
 	r, _ := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStylesFromJSONBytes(ansiGlamourStyle),
 		glamour.WithWordWrap(80),
 	)
 
+	s := spinner.New()
+	s.Spinner = BrailleWave
+	s.Style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(14))
+
 	return model{
-		viewport: vp,
-		textarea: ta,
-		history:  history,
-		cmd:      cmd,
-		stdin:    stdin,
-		scanner:  bufio.NewScanner(stdout),
-		renderer: r,
+		viewport:       vp,
+		textarea:       ta,
+		history:        []string{},
+		cmd:            cmd,
+		stdin:          stdin,
+		scanner:        bufio.NewScanner(stdout),
+		renderer:       r,
+		renderer_style: ansiGlamourStyle,
+		spinner:        s,
+		loadingText:    thinkingPhrases[0],
 	}
 }
 
 func main() {
-	p := tea.NewProgram(NewModel())
 
-	_, err := p.Run()
-	if err != nil {
+	p := tea.NewProgram(NewModel())
+	if _, err := p.Run(); err != nil {
 		panic(err)
 	}
 }
