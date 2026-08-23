@@ -3,7 +3,9 @@ import sqlite3
 from monitordb.integrations.google_health_connect.models import (
     HeartRateItem,
     NutritionLogItem,
+    OxygenSaturationItem,
     SleepSessionItem,
+    StepsItem,
 )
 from monitordb.logging_utils import logged
 
@@ -128,3 +130,51 @@ def update_nutrition_log(
         )
 
     return {"status": "success", "count": len(nutrition_log_items)}
+
+
+@logged
+def update_step_log(
+    conn: sqlite3.Connection, user_id: int, steps_items: list[StepsItem]
+) -> dict[str, int]:
+
+    cur = conn.cursor()
+    for step_record in steps_items:
+        start_epoch = int(step_record.start_time.timestamp())
+        end_epoch = int(step_record.end_time.timestamp())
+
+        cur.execute(
+            """
+            INSERT INTO step_logs (user_id, start_epoch, end_epoch, count)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, start_epoch) DO UPDATE SET
+                end_epoch = excluded.end_epoch,
+                count = excluded.count
+            """,
+            (user_id, start_epoch, end_epoch, step_record.count),
+        )
+
+    return {"status": "success", "count": len(steps_items)}
+
+
+@logged
+def update_oxygen_saturation_log(
+    conn: sqlite3.Connection,
+    user_id: int,
+    oxygen_saturation_items: list[OxygenSaturationItem],
+) -> dict[str, int]:
+
+    cur = conn.cursor()
+    for oxygen_saturation_record in oxygen_saturation_items:
+        epoch = int(oxygen_saturation_record.time.timestamp())
+        percentage = oxygen_saturation_record.percentage
+
+        cur.execute(
+            """
+            INSERT INTO oxygen_saturation_logs (user_id, epoch, percentage)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, epoch) DO UPDATE SET
+                percentage = excluded.percentage
+            """,
+            (user_id, epoch, percentage),
+        )
+    return {"status": "success", "count": len(oxygen_saturation_items)}

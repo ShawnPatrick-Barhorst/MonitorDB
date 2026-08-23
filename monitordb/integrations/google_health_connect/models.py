@@ -68,6 +68,13 @@ class StepsItem(BaseModel):
     end_time: datetime
 
 
+class OxygenSaturationItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    time: datetime
+    percentage: float
+
+
 class MetaDataItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

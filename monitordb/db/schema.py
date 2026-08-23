@@ -12,6 +12,8 @@ def init_tables(url: str):
     build_heart_rate_log(conn)
     build_sleep_log(conn)
     build_nutrition_log(conn)
+    build_steps_log(conn)
+    build_oxygen_saturation_log(conn)
 
 
 def build_user_table(conn: sqlite3.Connection):
@@ -255,6 +257,43 @@ def build_nutrition_log(conn: sqlite3):
 
             FOREIGN KEY (user_id) REFERENCES users(user_id)
             UNIQUE(user_id, start_epoch)
+        );
+        """
+    )
+    conn.commit()
+
+
+def build_steps_log(conn: sqlite3.Connection):
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS step_logs(
+            user_id INTEGER NOT NULL,
+            start_epoch INTEGER NOT NULL,
+            end_epoch INTEGER NOT NULL,
+            count INTEGER NOT NULL,
+
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+            UNIQUE(user_id, start_epoch)
+        );
+        """
+    )
+    conn.commit()
+
+
+def build_oxygen_saturation_log(conn: sqlite3.Connection):
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS oxygen_saturation_logs(
+            user_id INTEGER NOT NULL,
+            epoch INTEGER NOT NULL,
+            percentage INTEGER NOT NULL,
+
+            FOREIGN KEY (user_id) REFERENCES users(user_id),
+            UNIQUE(user_id, epoch)
         );
         """
     )
