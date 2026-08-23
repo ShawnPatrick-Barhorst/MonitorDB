@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -20,17 +20,36 @@ def _format_datetime(epoch: int) -> str:
 
 
 @health_connect_mcp.tool
-def list_sleep_sessions(days: int = 7) -> list[dict[str, Any]]:
-    """List sleep sessions from the last N days, most recent first.
+def list_sleep_sessions(
+    start_datetime: datetime, end_datetime: datetime
+) -> list[dict[str, Any]]:
+    """
+    List sleep sessions and sleep statistics within a time window between start_datetime and end_datetime
 
-    Returns one row per night with start/end times, total duration in hours, and the percentage of time.
+    Args:
+        start_datetime (ISO-8601): The beginning of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+        end_datetime (ISO-8601): The end of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+
+    Returns:
+        List of dictionaries containing features for each sleep session:
+        - start (str): start datetime of sleep session
+        - end (str): end_datetime of sleep session
+        - duration_hrs (int): duration of sleep in hours
+        - pct_deep_sleep (float): percentage of sleep spent in deep sleep
+        - pct_light_sleep (float): percentage of sleep spent in light sleep
+        - pct_rem_sleep (float): percentage of sleep spent in rem sleep
+        - pct_awake_sleep (float): percentage of sleep spent in awake sleep
+
+
     """
 
     conn = build_conn(DB_PATH)
     conn.row_factory = sqlite3.Row
 
-    end_datetime = datetime.now(tz=TZ)
-    start_datetime = end_datetime - timedelta(days=days)
+    start_epoch = int(start_datetime.timestamp())
+    end_epoch = int(end_datetime.timestamp())
 
     try:
         rows = conn.execute(
@@ -59,8 +78,8 @@ def list_sleep_sessions(days: int = 7) -> list[dict[str, Any]]:
             """,
             (
                 USER_ID,
-                int(start_datetime.timestamp()),
-                int(end_datetime.timestamp()),
+                start_epoch,
+                end_epoch,
                 MAX_ROWS,
             ),
         ).fetchall()
@@ -70,7 +89,6 @@ def list_sleep_sessions(days: int = 7) -> list[dict[str, Any]]:
 
     return [
         {
-            "session_id": row["session_id"],
             "start": _format_datetime(row["session_start_epoch"]),
             "end": _format_datetime(row["session_end_epoch"]),
             "duration_hrs": round((row["duration"] or 0) / 3600, 2),
@@ -87,9 +105,22 @@ def list_sleep_sessions(days: int = 7) -> list[dict[str, Any]]:
 def get_heart_rate_summary(
     start_datetime: datetime, end_datetime: datetime
 ) -> dict[str, Any]:
-    """Retrieve an analysis of heart_rate within a time window between start_datetime and end_datetime.
+    """
+    Retrieve an analysis of heart_rate within a time window between start_datetime and end_datetime.
 
-    Returns a single dictionary with the average bpm, and a count of bpm spikes
+    Args:
+        start_datetime (ISO-8601): The beginning of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+        end_datetime (ISO-8601): The end of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+
+    Returns:
+        Dictionary containing:
+        - average_bpm (float): Mean heart rate across the window.
+        - spike_count (int): Count of rapid heart rate surges >=threshold.
+        - start_datetime (str): Window start datetime.
+        - end_datetime (str): Window end datetime.
+        - sample_count (int): Number of data points analyzed.
     """
 
     conn = build_conn(DB_PATH)
@@ -116,7 +147,8 @@ def get_heart_rate_summary(
             )
             SELECT
                 AVG(bpm) AS avg_bpm,
-                COUNT(CASE WHEN bpm_delta >= 20 THEN 1 END) AS spike_count
+                COUNT(CASE WHEN bpm_delta >= 20 THEN 1 END) AS spike_count,
+                COUNT(bpm) AS sample_count
             FROM deltas;
             """,
             (USER_ID, start_epoch, end_epoch),
@@ -127,6 +159,9 @@ def get_heart_rate_summary(
     return {
         "average_bpm": round(report["avg_bpm"], 1),
         "spike_count": report["spike_count"],
+        "start_datetime": start_datetime,
+        "end_datetime": end_datetime,
+        "sample_count": report["sample_count"],
     }
 
 
@@ -134,6 +169,31 @@ def get_heart_rate_summary(
 def get_nutrition_summary(
     start_datetime: datetime, end_datetime: datetime
 ) -> list[dict[str, Any]]:
+    """
+    Retrieve logged meal details and macronutrient breakdowns for a specific time range.
+
+    Use this tool whenever the user asks about what they ate, their calorie intake,
+    or specific nutrient consumption (protein, carbs, fat, sugar, sodium, fiber)
+    over a day, week, or custom date range.
+
+    Args:
+        start_datetime (datetime): The beginning of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+        end_datetime (datetime): The end of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+
+    Returns:
+        list[dict[str, Any]]: List by day and meal; sum of nutrition information per meal:
+        - date (str): Date meal occured
+        - meal (str): Name of meal e.g.("Dinner", "Snack", etc)
+        - calories (int): Calorie count of meal
+        - protein_grams (int): Protein count in grams
+        - carbs_grams (int): Carb count in grams
+        - fat_grams (int): Fat count in grams
+        - sugar_grams (int): Sugar count in grams
+        - sodium_grams (int): Sodium count in grams
+        - dietary_fiber_grams (int): Fiber count in grams
+    """
     conn = build_conn(DB_PATH)
     conn.row_factory = sqlite3.Row
 
@@ -159,9 +219,7 @@ def get_nutrition_summary(
 
     return [
         {
-            "date": datetime.fromtimestamp(row["start_epoch"], tz=TZ)
-            .date()
-            .isoformat(),
+            "date": _format_datetime(row["start_epoch"]).date().isoformat(),
             "meal": row["meal_name"],
             "calories": row["calories"],
             "protein_grams": row["protein_grams"],
@@ -182,6 +240,8 @@ def get_steps_summary(
     """
     Retrieve daily step counts for a specific user within a date range.
 
+    Use this tool whenever the user asks about daily activity, or daily steps.
+
     Args:
         user_id: The unique integer ID of the user.
         start_datetime: Inclusive start time in ISO 8601 format (e.g., '2026-08-15T00:00:00-04:00').
@@ -189,10 +249,8 @@ def get_steps_summary(
 
     Returns:
         A list of daily records, ordered chronologically:
-        [
-            {"date": "2026-08-15", "count": 1916},
-            {"date": "2026-08-16", "count": 4250}
-        ]
+        - date: date of record
+        - count: number of steps
     """
 
     if start_datetime.tzinfo is None:
@@ -220,9 +278,7 @@ def get_steps_summary(
 
     return [
         {
-            "date": datetime.fromtimestamp(row["start_epoch"], tz=TZ)
-            .date()
-            .isoformat(),
+            "date": _format_datetime(row["start_epoch"]).date().isoformat(),
             "count": row["count"],
         }
         for row in report
@@ -250,12 +306,6 @@ def get_oxygen_saturation(
         A list of chronological SpO2 records containing:
         - "datetime": ISO 8601 formatted timestamp string in the local timezone.
         - "percentage": Blood oxygen saturation level (0.0 - 100.0).
-
-        Example:
-        [
-            {"datetime": "2026-08-22T02:15:00-04:00", "percentage": 97.5},
-            {"datetime": "2026-08-22T02:16:00-04:00", "percentage": 96.0}
-        ]
     """
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
@@ -284,7 +334,7 @@ def get_oxygen_saturation(
 
     return [
         {
-            "datetime": datetime.fromtimestamp(row["epoch"], tz=TZ).isoformat(),
+            "datetime": _format_datetime(row["epoch"]).isoformat(),
             "percentage": row["percentage"],
         }
         for row in report
