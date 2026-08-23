@@ -19,6 +19,10 @@ def _format_datetime(epoch: int) -> str:
     return datetime.fromtimestamp(epoch, tz=TZ).isoformat(timespec="minutes")
 
 
+def _format_date(epoch: int) -> str:
+    return datetime.fromtimestamp(epoch, tz=TZ).date().isoformat()
+
+
 @health_connect_mcp.tool
 def list_sleep_sessions(
     start_datetime: datetime, end_datetime: datetime
@@ -40,13 +44,18 @@ def list_sleep_sessions(
         - pct_deep_sleep (float): percentage of sleep spent in deep sleep
         - pct_light_sleep (float): percentage of sleep spent in light sleep
         - pct_rem_sleep (float): percentage of sleep spent in rem sleep
-        - pct_awake_sleep (float): percentage of sleep spent in awake sleep
+        - pct_awake (float): percentage of sleep spent awake
 
 
     """
 
     conn = build_conn(DB_PATH)
     conn.row_factory = sqlite3.Row
+
+    if start_datetime.tzinfo is None:
+        start_datetime = start_datetime.replace(tzinfo=TZ)
+    if end_datetime.tzinfo is None:
+        end_datetime = end_datetime.replace(tzinfo=TZ)
 
     start_epoch = int(start_datetime.timestamp())
     end_epoch = int(end_datetime.timestamp())
@@ -157,10 +166,12 @@ def get_heart_rate_summary(
         conn.close()
 
     return {
-        "average_bpm": round(report["avg_bpm"], 1),
+        "average_bpm": round(report["avg_bpm"], 1)
+        if report["avg_bpm"] is not None
+        else None,
         "spike_count": report["spike_count"],
-        "start_datetime": start_datetime,
-        "end_datetime": end_datetime,
+        "start_datetime": start_datetime.isoformat(timespec="minutes"),
+        "end_datetime": end_datetime.isoformat(timespec="minutes"),
         "sample_count": report["sample_count"],
     }
 
@@ -177,9 +188,9 @@ def get_nutrition_summary(
     over a day, week, or custom date range.
 
     Args:
-        start_datetime (datetime): The beginning of the time window to search.
+        start_datetime (ISO-8601): The beginning of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
-        end_datetime (datetime): The end of the time window to search.
+        end_datetime (ISO-8601): The end of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
 
     Returns:
@@ -219,7 +230,7 @@ def get_nutrition_summary(
 
     return [
         {
-            "date": _format_datetime(row["start_epoch"]).date().isoformat(),
+            "date": _format_date(row["start_epoch"]),
             "meal": row["meal_name"],
             "calories": row["calories"],
             "protein_grams": row["protein_grams"],
@@ -235,7 +246,7 @@ def get_nutrition_summary(
 
 @health_connect_mcp.tool
 def get_steps_summary(
-    user_id: int, start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime, end_datetime: datetime
 ) -> list[dict[str, Any]]:
     """
     Retrieve daily step counts for a specific user within a date range.
@@ -243,9 +254,10 @@ def get_steps_summary(
     Use this tool whenever the user asks about daily activity, or daily steps.
 
     Args:
-        user_id: The unique integer ID of the user.
-        start_datetime: Inclusive start time in ISO 8601 format (e.g., '2026-08-15T00:00:00-04:00').
-        end_datetime: Exclusive end time in ISO 8601 format (e.g., '2026-08-22T00:00:00-04:00').
+        start_datetime (ISO-8601): The beginning of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+        end_datetime (ISO-8601): The end of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
 
     Returns:
         A list of daily records, ordered chronologically:
@@ -271,14 +283,14 @@ def get_steps_summary(
             FROM step_logs
             WHERE user_id = ? AND start_epoch BETWEEN ? AND ?
         """,
-            (user_id, start_epoch, end_epoch),
+            (USER_ID, start_epoch, end_epoch),
         ).fetchall()
     finally:
         conn.close()
 
     return [
         {
-            "date": _format_datetime(row["start_epoch"]).date().isoformat(),
+            "date": _format_date(row["start_epoch"]),
             "count": row["count"],
         }
         for row in report
@@ -287,7 +299,7 @@ def get_steps_summary(
 
 @health_connect_mcp.tool
 def get_oxygen_saturation(
-    user_id: int, start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime, end_datetime: datetime
 ) -> list[dict[str, Any]]:
     """
     Retrieve time-series blood oxygen saturation (SpO2) readings for a user within a specified time range.
@@ -296,16 +308,15 @@ def get_oxygen_saturation(
     (readings below 90-95%), or review daytime spot-check vitals.
 
     Args:
-        user_id: The unique integer ID of the user.
-        start_datetime: Inclusive start timestamp. Can be an ISO 8601 string (e.g., '2026-08-21T23:00:00-04:00')
-            or a datetime object.
-        end_datetime: Inclusive end timestamp. Can be an ISO 8601 string (e.g., '2026-08-22T08:00:00-04:00')
-            or a datetime object.
+        start_datetime (ISO-8601): The beginning of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
+        end_datetime (ISO-8601): The end of the time window to search.
+            If no timezone is provided, the user's local timezone is assumed.
 
     Returns:
         A list of chronological SpO2 records containing:
-        - "datetime": ISO 8601 formatted timestamp string in the local timezone.
-        - "percentage": Blood oxygen saturation level (0.0 - 100.0).
+        - datetime: ISO 8601 formatted timestamp string in the local timezone.
+        - percentage: Blood oxygen saturation level (0.0 - 100.0).
     """
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
@@ -324,9 +335,10 @@ def get_oxygen_saturation(
         SELECT user_id, epoch, percentage 
         FROM oxygen_saturation_logs
         WHERE user_id = ? AND epoch BETWEEN ? AND ?
+        ORDER BY epoch ASC
         
         """,
-            (user_id, start_epoch, end_epoch),
+            (USER_ID, start_epoch, end_epoch),
         ).fetchall()
 
     finally:
@@ -334,7 +346,7 @@ def get_oxygen_saturation(
 
     return [
         {
-            "datetime": _format_datetime(row["epoch"]).isoformat(),
+            "datetime": _format_datetime(row["epoch"]),
             "percentage": row["percentage"],
         }
         for row in report
