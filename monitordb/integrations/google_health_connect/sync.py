@@ -3,12 +3,14 @@ from monitordb.db.connection import build_conn
 from monitordb.integrations.google_health_connect.store import (
     update_heart_rate_logs,
     update_nutrition_log,
+    update_oxygen_saturation_log,
     update_sleep_logs,
     update_step_log,
 )
 from monitordb.integrations.google_health_connect.transform import (
     parse_heart_rate,
     parse_nutrition_log,
+    parse_oxygen_saturation_log,
     parse_sleep_sessions,
     parse_steps,
 )
@@ -18,6 +20,7 @@ HEALTH_CONNECT_HANDLERS = {
     "heart_rate": (parse_heart_rate, update_heart_rate_logs),
     "nutrition": (parse_nutrition_log, update_nutrition_log),
     "steps": (parse_steps, update_step_log),
+    "oxygen_saturation": (parse_oxygen_saturation_log, update_oxygen_saturation_log),
 }
 
 

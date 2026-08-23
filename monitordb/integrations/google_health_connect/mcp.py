@@ -36,27 +36,27 @@ def list_sleep_sessions(days: int = 7) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT 
-            s.session_id,
-            s.session_start_epoch,
-            s.session_end_epoch,
-            s.duration,
-            COUNT(st.stage) AS stage_count,
-            ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'Deep Sleep'  THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_deep_sleep,
-            ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'Light Sleep' THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_light_sleep,
-            ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'REM Sleep'   THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_rem_sleep,
-            ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'Awake'       THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_awake
-        FROM sleep_sessions s
-        JOIN sleep_stages st ON s.session_id = st.session_id
-        WHERE s.user_id = ? 
-        AND s.session_end_epoch BETWEEN ? AND ?
-        GROUP BY 
-            s.session_id, 
-            s.session_start_epoch, 
-            s.session_end_epoch, 
-            s.duration
-        ORDER BY s.session_end_epoch DESC
-        LIMIT ?;
-        """,
+                s.session_id,
+                s.session_start_epoch,
+                s.session_end_epoch,
+                s.duration,
+                COUNT(st.stage) AS stage_count,
+                ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'Deep Sleep'  THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_deep_sleep,
+                ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'Light Sleep' THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_light_sleep,
+                ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'REM Sleep'   THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_rem_sleep,
+                ROUND(100.0 * SUM(CASE WHEN st.stage_name = 'Awake'       THEN (st.stage_end_epoch - st.stage_start_epoch) ELSE 0 END) / NULLIF(SUM(st.stage_end_epoch - st.stage_start_epoch), 0), 1) AS pct_awake
+            FROM sleep_sessions s
+            JOIN sleep_stages st ON s.session_id = st.session_id
+            WHERE s.user_id = ? 
+            AND s.session_end_epoch BETWEEN ? AND ?
+            GROUP BY 
+                s.session_id, 
+                s.session_start_epoch, 
+                s.session_end_epoch, 
+                s.duration
+            ORDER BY s.session_end_epoch DESC
+            LIMIT ?;
+            """,
             (
                 USER_ID,
                 int(start_datetime.timestamp()),
@@ -224,6 +224,68 @@ def get_steps_summary(
             .date()
             .isoformat(),
             "count": row["count"],
+        }
+        for row in report
+    ]
+
+
+@health_connect_mcp.tool
+def get_oxygen_saturation(
+    user_id: int, start_datetime: datetime, end_datetime: datetime
+) -> list[dict[str, Any]]:
+    """
+    Retrieve time-series blood oxygen saturation (SpO2) readings for a user within a specified time range.
+
+    Use this tool to analyze blood oxygen levels during sleep sessions, detect nocturnal hypoxemic dips
+    (readings below 90-95%), or review daytime spot-check vitals.
+
+    Args:
+        user_id: The unique integer ID of the user.
+        start_datetime: Inclusive start timestamp. Can be an ISO 8601 string (e.g., '2026-08-21T23:00:00-04:00')
+            or a datetime object.
+        end_datetime: Inclusive end timestamp. Can be an ISO 8601 string (e.g., '2026-08-22T08:00:00-04:00')
+            or a datetime object.
+
+    Returns:
+        A list of chronological SpO2 records containing:
+        - "datetime": ISO 8601 formatted timestamp string in the local timezone.
+        - "percentage": Blood oxygen saturation level (0.0 - 100.0).
+
+        Example:
+        [
+            {"datetime": "2026-08-22T02:15:00-04:00", "percentage": 97.5},
+            {"datetime": "2026-08-22T02:16:00-04:00", "percentage": 96.0}
+        ]
+    """
+    if start_datetime.tzinfo is None:
+        start_datetime = start_datetime.replace(tzinfo=TZ)
+    if end_datetime.tzinfo is None:
+        end_datetime = end_datetime.replace(tzinfo=TZ)
+
+    start_epoch = int(start_datetime.timestamp())
+    end_epoch = int(end_datetime.timestamp())
+
+    conn = build_conn(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    try:
+        report = conn.execute(
+            """
+        SELECT user_id, epoch, percentage 
+        FROM oxygen_saturation_logs
+        WHERE user_id = ? AND epoch BETWEEN ? AND ?
+        
+        """,
+            (user_id, start_epoch, end_epoch),
+        ).fetchall()
+
+    finally:
+        conn.close()
+
+    return [
+        {
+            "datetime": datetime.fromtimestamp(row["epoch"], tz=TZ).isoformat(),
+            "percentage": row["percentage"],
         }
         for row in report
     ]

@@ -3,6 +3,7 @@ import sqlite3
 from monitordb.integrations.google_health_connect.models import (
     HeartRateItem,
     NutritionLogItem,
+    OxygenSaturationItem,
     SleepSessionItem,
     StepsItem,
 )
@@ -153,3 +154,27 @@ def update_step_log(
         )
 
     return {"status": "success", "count": len(steps_items)}
+
+
+@logged
+def update_oxygen_saturation_log(
+    conn: sqlite3.Connection,
+    user_id: int,
+    oxygen_saturation_items: list[OxygenSaturationItem],
+) -> dict[str, int]:
+
+    cur = conn.cursor()
+    for oxygen_saturation_record in oxygen_saturation_items:
+        epoch = int(oxygen_saturation_record.time.timestamp())
+        percentage = oxygen_saturation_record.percentage
+
+        cur.execute(
+            """
+            INSERT INTO oxygen_saturation_logs (user_id, epoch, percentage)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, epoch) DO UPDATE SET
+                percentage = excluded.percentage
+            """,
+            (user_id, epoch, percentage),
+        )
+    return {"status": "success", "count": len(oxygen_saturation_items)}

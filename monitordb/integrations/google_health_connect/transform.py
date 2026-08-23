@@ -3,6 +3,7 @@ from pydantic import TypeAdapter
 from monitordb.integrations.google_health_connect.models import (
     HeartRateItem,
     NutritionLogItem,
+    OxygenSaturationItem,
     SleepSessionItem,
     StepsItem,
 )
@@ -11,6 +12,7 @@ SLEEP_SESSION_ADAPTER = TypeAdapter(list[SleepSessionItem])
 HEART_RATE_ADAPTER = TypeAdapter(list[HeartRateItem])
 NUTRITION_LOG_ADAPTER = TypeAdapter(list[NutritionLogItem])
 STEPS_LOG_ADAPTER = TypeAdapter(list[StepsItem])
+OXYGEN_SATURATION_ADAPTER = TypeAdapter(list[OxygenSaturationItem])
 
 
 def parse_sleep_sessions(raw_sessions: list[dict]) -> list[SleepSessionItem]:
@@ -27,3 +29,7 @@ def parse_nutrition_log(raw_nutrition_log: list[dict]) -> list[NutritionLogItem]
 
 def parse_steps(raw_steps: list[dict]) -> list[StepsItem]:
     return STEPS_LOG_ADAPTER.validate_python(raw_steps)
+
+
+def parse_oxygen_saturation_log(raw_oxygen_saturation: list[dict]):
+    return OXYGEN_SATURATION_ADAPTER.validate_python(raw_oxygen_saturation)
