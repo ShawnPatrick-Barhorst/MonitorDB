@@ -1,5 +1,7 @@
 import logging
 
+from monitordb.integrations import discover
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -7,11 +9,11 @@ logging.basicConfig(
 
 from fastapi import FastAPI
 
-from monitordb.integrations.google_health_connect.route import health_connect_router
-
 app = FastAPI(title="MonitorDB")
 
-app.include_router(health_connect_router)
+for integration in discover():
+    if integration.router is not None:
+        app.include_router(integration.router)
 
 
 @app.get("/biometric")
