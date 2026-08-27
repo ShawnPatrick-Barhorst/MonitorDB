@@ -18,7 +18,7 @@ def main():
     )
     args = parser.parse_args()
 
-    agent = build_agent("google:gemini-3.5-flash")
+    agent = build_agent("google:gemini-3.5-flash-lite")
 
     if args.json:
         asyncio.run(run_json_stdio(agent))
