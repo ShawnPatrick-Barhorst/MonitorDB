@@ -93,3 +93,19 @@ def load_history(
         ModelMessagesTypeAdapter.validate_json(message_json)[0]
         for (message_json,) in rows
     ]
+
+
+def load_sessions(conn: sqlite3.Connection, user_id: int) -> list[str]:
+
+    cur = conn.cursor()
+
+    sessions = cur.execute(
+        """
+        SELECT session_id, user_id, updated_epoch FROM session_history
+        WHERE user_id = ?
+        ORDER BY updated_epoch DESC
+        """,
+        (user_id,),
+    ).fetchall()
+
+    return [session_id for (session_id, user_id, updated_epoch) in sessions]

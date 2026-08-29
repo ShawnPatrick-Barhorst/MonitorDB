@@ -72,7 +72,6 @@ type model struct {
 
 type promptPayload struct {
 	Prompt            string  `json:"prompt"`
-	SessionID         string  `json:"session_id"`
 	SystemInstruction string  `json:"system_instruction,omitempty"`
 	Temperature       float64 `json:"temperature,omitempty"`
 	MaxOutputTokens   int     `json:"max_output_tokens,omitempty"`
@@ -83,6 +82,11 @@ type responsePayload struct {
 	Type        string `json:"type"`
 	ContentType string `json:"content_type"`
 	Content     string `json:"content"`
+}
+
+type actionPayload struct {
+	Command string `json:"command"`
+	Args    string `json:"args"`
 }
 
 type (
@@ -173,7 +177,21 @@ func renderHistory(width int, history []string, renderer *glamour.TermRenderer, 
 
 func sendPrompt(stdin io.Writer, scanner *bufio.Scanner, text string) tea.Cmd {
 	return func() tea.Msg {
-		data, _ := json.Marshal(promptPayload{Prompt: text, SessionID: "default"})
+		data, _ := json.Marshal(promptPayload{Prompt: text})
+		_, _ = stdin.Write(append(data, '\n'))
+
+		if scanner.Scan() {
+			var resp responsePayload
+			_ = json.Unmarshal(scanner.Bytes(), &resp)
+			return responseMsg(resp.Content)
+		}
+		return responseMsg("[No response from engine]")
+	}
+}
+
+func sendAction(stdin io.Writer, scanner *bufio.Scanner, actionType string, content string) tea.Cmd {
+	return func() tea.Msg {
+		data, _ := json.Marshal(actionPayload{Command: actionType, Args: content})
 		_, _ = stdin.Write(append(data, '\n'))
 
 		if scanner.Scan() {
@@ -242,11 +260,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			m.updateViewportHeight()
 
-			return m, tea.Batch(
-				sendPrompt(m.stdin, m.scanner, input),
-				m.spinner.Tick,
-				cycleTextCmd(),
-			)
+			if strings.HasPrefix(input, "/") {
+				input = strings.TrimPrefix(input, "/")
+				action, content, _ := strings.Cut(input, " ")
+				return m, tea.Batch(
+					sendAction(m.stdin, m.scanner, action, content),
+					m.spinner.Tick,
+					cycleTextCmd(),
+				)
+			} else {
+				return m, tea.Batch(
+					sendPrompt(m.stdin, m.scanner, input),
+					m.spinner.Tick,
+					cycleTextCmd(),
+				)
+			}
 
 		case "ctrl+c", "esc":
 			if m.cmd != nil && m.cmd.Process != nil {

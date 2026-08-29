@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 class PromptPayload(BaseModel):
     prompt: str = Field(..., min_length=1)
-    session_id: str = Field(default="default")
     system_instruction: str | None = None
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_output_tokens: int = Field(default=2048, gt=0, le=8192)
@@ -13,6 +12,13 @@ class PromptPayload(BaseModel):
 
 
 class ResponsePayload(BaseModel):
-    type: Literal["thought", "model_output", "tool_call", "tool_result"] = (Field(...),)
-    content_type: Literal["text", "image", "function_call"] = (Field(default="text"),)
+    type: Literal[
+        "thought", "model_output", "tool_call", "tool_result", "command_result", "error"
+    ] = Field(...)
+    content_type: Literal["text", "image", "function_call"] = Field(default="text")
     content: str = Field(...)
+
+
+class ActionPayload(BaseModel):
+    command: Literal["open", "new", "sessions"] = Field(...)
+    args: str = Field(default="")
