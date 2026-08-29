@@ -3,7 +3,10 @@ import sys
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 
+from monitordb.config import DB_PATH, USER_ID
+from monitordb.db.connection import build_conn
 from monitordb.llm.payloads import PromptPayload, ResponsePayload
+from monitordb.llm.store import append_messages, load_history, upsert_session
 
 # def run_interactive_repl(engine: GeminiEngine):
 #     session_id = "cli-session"
@@ -23,8 +26,9 @@ from monitordb.llm.payloads import PromptPayload, ResponsePayload
 #             break
 
 
-async def run_json_stdio(agent: Agent):
+async def run_json_stdio(agent: Agent, testing: bool = False):
     sessions: dict[str, list[ModelMessage]] = {}
+    conn = build_conn(DB_PATH)
     async with agent:
         for line in sys.stdin:
             line = line.strip()
@@ -32,10 +36,23 @@ async def run_json_stdio(agent: Agent):
                 continue
             try:
                 payload = PromptPayload.model_validate_json(line)
-                history = sessions.get(payload.session_id, [])
+                # history = sessions.get(payload.session_id, [])
+                history = load_history(conn, USER_ID, payload.session_id)
 
                 result = await agent.run(payload.prompt, message_history=history)
                 sessions[payload.session_id] = result.all_messages()
+
+                if not testing:
+                    upsert_session(
+                        conn,
+                        USER_ID,
+                        payload.session_id,
+                    )
+                # Upsert text history
+                if not testing:
+                    append_messages(
+                        conn, USER_ID, payload.session_id, result.new_messages()
+                    )
 
                 response = ResponsePayload(
                     type="model_output", content_type="text", content=result.output
