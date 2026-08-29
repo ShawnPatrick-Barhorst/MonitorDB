@@ -36,7 +36,7 @@ def append_messages(
 
     rows = []
     for offset, message in enumerate(model_messages):
-        part = message.parts[0]
+        part = message.parts[-1]
 
         rows.append(
             (
@@ -93,6 +93,22 @@ def load_history(
         ModelMessagesTypeAdapter.validate_json(message_json)[0]
         for (message_json,) in rows
     ]
+
+
+def load_transcript(conn: sqlite3.Connection, user_id: int, session_id: str):
+
+    cur = conn.cursor()
+
+    messages = cur.execute(
+        """
+        SELECT kind, content_type, text_content FROM message_history
+        WHERE user_id = ? AND session_id = ?
+        ORDER BY sequence ASC
+        """,
+        (user_id, session_id),
+    ).fetchall()
+
+    return messages
 
 
 def load_sessions(conn: sqlite3.Connection, user_id: int) -> list[str]:

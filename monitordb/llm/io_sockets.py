@@ -9,11 +9,17 @@ from pydantic_ai.run import AgentRunResult
 
 from monitordb.config import DB_PATH, USER_ID
 from monitordb.db.connection import build_conn
-from monitordb.llm.payloads import ActionPayload, PromptPayload, ResponsePayload
+from monitordb.llm.payloads import (
+    ActionPayload,
+    PromptPayload,
+    ResponsePayload,
+    TranscriptBatch,
+)
 from monitordb.llm.store import (
     append_messages,
     load_history,
     load_sessions,
+    load_transcript,
     upsert_session,
 )
 
@@ -73,14 +79,18 @@ def _handle_action(
 
         if args in sessions:
             return ResponsePayload(
-                type="command_result",
-                content_type="text",
-                content=f"Loaded session: {args}.",
+                type="session_loaded",
+                content=f"─────────  Loaded session: **{args}**  ─────────",
+                messages=[
+                    TranscriptBatch(kind=kind, text_content=text)
+                    for kind, content_type, text in load_transcript(conn, user_id, args)
+                    if content_type in ("user-prompt", "text")
+                ],
             ), args
 
         else:
             return ResponsePayload(
-                type="error",
+                type="command_result",
                 content="Session doesn't exist yet. Use `/new <name>` to start a new session.",
             ), current_session
 
