@@ -10,6 +10,8 @@ def init_tables(url: str):
     build_psych_evaluation_table(conn)
     build_subjective_state_table(conn)
     build_calendar_events_table(conn)
+    build_session_history(conn)
+    build_message_history(conn)
 
     for integration in discover():
         if integration.build_schema is None:
@@ -164,6 +166,49 @@ def build_calendar_events_table(conn: sqlite3.Connection):
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_calendar_events_time
         ON calendar_events(user_id, start_epoch ASC, end_epoch ASC)
+    """)
+
+    conn.commit()
+
+
+def build_session_history(conn: sqlite3.Connection):
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS session_history(
+            session_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            title TEXT,
+            created_epoch INTEGER NOT NULL DEFAULT (unixepoch()),
+            updated_epoch INTEGER NOT NULL DEFAULT (unixepoch()),
+
+            PRIMARY KEY (session_id, user_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+
+    conn.commit()
+
+
+def build_message_history(conn: sqlite3.Connection):
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS message_history(
+            session_id TEXT NOT NULL,
+            user_id INT NOT NULL,
+            sequence INTEGER NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('request', 'response')),
+            content_type TEXT,
+            text_content TEXT,
+            created_epoch INTEGER NOT NULL DEFAULT (unixepoch()),
+            message_json TEXT NOT NULL,
+
+            UNIQUE (user_id, session_id, sequence),
+            FOREIGN KEY (user_id, session_id) REFERENCES session_history(user_id, session_id)
+        )
     """)
 
     conn.commit()
