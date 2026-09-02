@@ -1,7 +1,13 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, computed_field
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    computed_field,
+    model_validator,
+)
 
 Decimal3 = Annotated[float, AfterValidator(lambda x: round(x, 3))]
 
@@ -44,6 +50,13 @@ class HeartRateItem(BaseModel):
     bpm: int
     time: datetime
 
+    @model_validator(mode="before")
+    @classmethod
+    def fall_back_to_avg(cls, data):
+        if isinstance(data, dict) and data.get("bpm") is None and "avg" in data:
+            data = {**data, "bpm": data["avg"]}
+        return data
+
 
 class NutritionLogItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -73,6 +86,13 @@ class OxygenSaturationItem(BaseModel):
 
     time: datetime
     percentage: float
+
+    @model_validator(mode="before")
+    @classmethod
+    def fall_back_to_avg(cls, data):
+        if isinstance(data, dict) and data.get("percentage") is None and "avg" in data:
+            data = {**data, "percentage": data["avg"]}
+        return data
 
 
 class MetaDataItem(BaseModel):
