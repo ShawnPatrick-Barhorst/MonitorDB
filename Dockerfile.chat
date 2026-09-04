@@ -1,0 +1,17 @@
+FROM golang:1.26-trixie AS go-builder
+
+WORKDIR /src 
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ ./cmd/
+RUN CGO_ENABLED=0 go build -o /out/monitordb-tui ./cmd/tui
+
+FROM monitordb-webhook:local
+
+COPY --from=go-builder /out/monitordb-tui /usr/local/bin/monitordb-tui
+COPY cmd/tui/ansiGlamourStyle.json /app/cmd/tui/ansiGlamourStyle.json
+
+ENV UV_NO_SYNC=1 UV_FROZEN=1
+
+
+CMD ["monitordb-tui"]

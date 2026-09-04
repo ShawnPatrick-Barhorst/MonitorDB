@@ -1,0 +1,30 @@
+services:
+  webhook:
+    build:
+      context: .
+      dockerfile: Dockerfile.webhook
+    image: monitordb-webhook:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - monitordb_data:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  chat:
+    build:
+      context: .
+      dockerfile: Dockerfile.chat
+    image: monitordb-chat:local
+    env_file:
+      - .env
+    volumes:
+      - monitordb_data:/data
+    stdin_open: true
+    tty: true
+    profiles:
+      - chat
+
+volumes:
+  monitordb_data:
