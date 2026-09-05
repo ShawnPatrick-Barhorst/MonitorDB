@@ -9,8 +9,6 @@ services:
       - .env
     volumes:
       - monitordb_data:/data
-    ports:
-      - "127.0.0.1:8000:8000"
 
   chat:
     build:
@@ -26,5 +24,21 @@ services:
     profiles:
       - chat
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - webhook
+
 volumes:
   monitordb_data:
+  caddy_data:
+  caddy_config:
