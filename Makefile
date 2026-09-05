@@ -1,4 +1,4 @@
-.PHONY up down restart build chat
+.PHONY: up down restart build chat
 
 up: 
 	docker compose up -d
