@@ -1,0 +1,15 @@
+FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY monitordb/ ./monitordb/
+COPY scripts/ ./scripts
+COPY example_user.json ./
+RUN uv sync --frozen --no-dev
+
+ENV MONITORDB_PATH=/data/user_monitor.db
+
+CMD ["uv", "run", "uvicorn", "monitordb.server:app", "--host", "0.0.0.0", "--port", "8000"]

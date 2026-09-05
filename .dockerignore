@@ -1,0 +1,13 @@
+.git
+.env
+*.db
+database/
+.venv
+__pycache__
+*.pyc
+.mypy_cache
+.ruff_cache
+monitordb-bin
+user.json
+test_server/
+*.log
