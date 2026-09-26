@@ -70,9 +70,17 @@ type model struct {
 	isLoading   bool
 }
 
+type actionPayload struct {
+	Command string `json:"command"`
+	Args    string `json:"args"`
+}
+
+type transcriptEntry struct {
+	Kind        string `json:"kind"`
+	TextContent string `json:"text_content"`
+}
 type promptPayload struct {
 	Prompt            string  `json:"prompt"`
-	SessionID         string  `json:"session_id"`
 	SystemInstruction string  `json:"system_instruction,omitempty"`
 	Temperature       float64 `json:"temperature,omitempty"`
 	MaxOutputTokens   int     `json:"max_output_tokens,omitempty"`
@@ -80,14 +88,16 @@ type promptPayload struct {
 }
 
 type responsePayload struct {
-	Type        string `json:"type"`
-	ContentType string `json:"content_type"`
-	Content     string `json:"content"`
+	Type        string            `json:"type"`
+	ContentType string            `json:"content_type"`
+	Content     string            `json:"content"`
+	Messages    []transcriptEntry `json:"messages"`
 }
 
 type (
-	responseMsg  string
-	cycleTextMsg struct{}
+	responseMsg      string
+	sessionLoadedMsg responsePayload
+	cycleTextMsg     struct{}
 )
 
 func cycleTextCmd() tea.Cmd {
@@ -173,12 +183,29 @@ func renderHistory(width int, history []string, renderer *glamour.TermRenderer, 
 
 func sendPrompt(stdin io.Writer, scanner *bufio.Scanner, text string) tea.Cmd {
 	return func() tea.Msg {
-		data, _ := json.Marshal(promptPayload{Prompt: text, SessionID: "default"})
+		data, _ := json.Marshal(promptPayload{Prompt: text})
 		_, _ = stdin.Write(append(data, '\n'))
 
 		if scanner.Scan() {
 			var resp responsePayload
 			_ = json.Unmarshal(scanner.Bytes(), &resp)
+			return responseMsg(resp.Content)
+		}
+		return responseMsg("[No response from engine]")
+	}
+}
+
+func sendAction(stdin io.Writer, scanner *bufio.Scanner, actionType string, content string) tea.Cmd {
+	return func() tea.Msg {
+		data, _ := json.Marshal(actionPayload{Command: actionType, Args: content})
+		_, _ = stdin.Write(append(data, '\n'))
+
+		if scanner.Scan() {
+			var resp responsePayload
+			_ = json.Unmarshal(scanner.Bytes(), &resp)
+			if resp.Type == "session_loaded" {
+				return sessionLoadedMsg(resp)
+			}
 			return responseMsg(resp.Content)
 		}
 		return responseMsg("[No response from engine]")
@@ -202,6 +229,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
 	switch msg := msg.(type) {
+
+	case sessionLoadedMsg:
+		m.isLoading = false
+		m.textarea.Focus()
+		m.history = m.history[:0]
+		for _, entry := range msg.Messages {
+			if entry.Kind == "request" {
+				m.history = append(m.history, "You: "+entry.TextContent)
+			} else {
+				m.history = append(m.history, entry.TextContent)
+			}
+		}
+		m.history = append(m.history, msg.Content)
+		m.viewport.SetContent(renderHistory(m.viewport.Width(), m.history, m.renderer, m.isLoading, m.spinner.View(), m.loadingText))
+		m.viewport.GotoBottom()
+		return m, nil
+
 	case spinner.TickMsg:
 		if m.isLoading {
 			m.spinner, spCmd = m.spinner.Update(msg)
@@ -242,11 +286,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			m.updateViewportHeight()
 
-			return m, tea.Batch(
-				sendPrompt(m.stdin, m.scanner, input),
-				m.spinner.Tick,
-				cycleTextCmd(),
-			)
+			if strings.HasPrefix(input, "/") {
+				input = strings.TrimPrefix(input, "/")
+				action, content, _ := strings.Cut(input, " ")
+				return m, tea.Batch(
+					sendAction(m.stdin, m.scanner, action, content),
+					m.spinner.Tick,
+					cycleTextCmd(),
+				)
+			} else {
+				return m, tea.Batch(
+					sendPrompt(m.stdin, m.scanner, input),
+					m.spinner.Tick,
+					cycleTextCmd(),
+				)
+			}
 
 		case "ctrl+c", "esc":
 			if m.cmd != nil && m.cmd.Process != nil {
