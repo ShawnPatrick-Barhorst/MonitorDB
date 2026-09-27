@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,9 @@ def _format_date(epoch: int) -> str:
 
 @health_connect_mcp.tool
 def list_sleep_sessions(
-    start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime | None,
+    end_datetime: datetime | None,
+    past_days: int | None,
 ) -> list[dict[str, Any]]:
     """
     List sleep sessions and sleep statistics within a time window between start_datetime and end_datetime
@@ -35,6 +37,8 @@ def list_sleep_sessions(
             If no timezone is provided, the user's local timezone is assumed.
         end_datetime (ISO-8601): The end of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
+        past_days (int): Alternative to start/end datetimes. Specifies a lookback
+            window of the past N days from now. Mutually exclusive with start/end datetimes.
 
     Returns:
         List of dictionaries containing features for each sleep session:
@@ -49,16 +53,31 @@ def list_sleep_sessions(
 
     """
 
-    conn = build_conn(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    if (start_datetime and end_datetime) and (past_days):
+        raise ValueError("Provide either a datetime window OR past n days, not both")
+
+    if not (start_datetime and end_datetime) and not (past_days):
+        raise ValueError("Provide either a datetime window OR past n days")
+
+    if not (start_datetime and end_datetime):
+        raise ValueError(
+            "A datetime window must consist of both a start and end datetime"
+        )
 
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
     if end_datetime.tzinfo is None:
         end_datetime = end_datetime.replace(tzinfo=TZ)
 
-    start_epoch = int(start_datetime.timestamp())
-    end_epoch = int(end_datetime.timestamp())
+    if past_days:
+        start_epoch = int((datetime.now(tz=TZ) - timedelta(days=past_days)).timestamp)
+        end_epoch = datetime.now(tz=TZ)
+    else:
+        start_epoch = int(start_datetime.timestamp())
+        end_epoch = int(end_datetime.timestamp())
+
+    conn = build_conn(DB_PATH)
+    conn.row_factory = sqlite3.Row
 
     try:
         rows = conn.execute(
@@ -112,7 +131,9 @@ def list_sleep_sessions(
 
 @health_connect_mcp.tool
 def get_heart_rate_summary(
-    start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime | None,
+    end_datetime: datetime | None,
+    past_days: int | None,
 ) -> dict[str, Any]:
     """
     Retrieve an analysis of heart_rate within a time window between start_datetime and end_datetime.
@@ -122,6 +143,8 @@ def get_heart_rate_summary(
             If no timezone is provided, the user's local timezone is assumed.
         end_datetime (ISO-8601): The end of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
+        past_days (int): Alternative to start/end datetimes. Specifies a lookback
+            window of the past N days from now. Mutually exclusive with start/end datetimes.
 
     Returns:
         Dictionary containing:
@@ -132,16 +155,31 @@ def get_heart_rate_summary(
         - sample_count (int): Number of data points analyzed.
     """
 
-    conn = build_conn(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    if (start_datetime and end_datetime) and (past_days):
+        raise ValueError("Provide either a datetime window OR past n days, not both")
+
+    if not (start_datetime and end_datetime) and not (past_days):
+        raise ValueError("Provide either a datetime window OR past n days")
+
+    if not (start_datetime and end_datetime):
+        raise ValueError(
+            "A datetime window must consist of both a start and end datetime"
+        )
 
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
     if end_datetime.tzinfo is None:
         end_datetime = end_datetime.replace(tzinfo=TZ)
 
-    start_epoch = int(start_datetime.timestamp())
-    end_epoch = int(end_datetime.timestamp())
+    if past_days:
+        start_epoch = int((datetime.now(tz=TZ) - timedelta(days=past_days)).timestamp)
+        end_epoch = datetime.now(tz=TZ)
+    else:
+        start_epoch = int(start_datetime.timestamp())
+        end_epoch = int(end_datetime.timestamp())
+
+    conn = build_conn(DB_PATH)
+    conn.row_factory = sqlite3.Row
 
     try:
         report = conn.execute(
@@ -178,7 +216,7 @@ def get_heart_rate_summary(
 
 @health_connect_mcp.tool
 def get_nutrition_summary(
-    start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime | None, end_datetime: datetime | None, past_days: None
 ) -> list[dict[str, Any]]:
     """
     Retrieve logged meal details and macronutrient breakdowns for a specific time range.
@@ -192,6 +230,8 @@ def get_nutrition_summary(
             If no timezone is provided, the user's local timezone is assumed.
         end_datetime (ISO-8601): The end of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
+        past_days (int): Alternative to start/end datetimes. Specifies a lookback
+            window of the past N days from now. Mutually exclusive with start/end datetimes.
 
     Returns:
         list[dict[str, Any]]: List by day and meal; sum of nutrition information per meal:
@@ -205,16 +245,31 @@ def get_nutrition_summary(
         - sodium_grams (int): Sodium count in grams
         - dietary_fiber_grams (int): Fiber count in grams
     """
-    conn = build_conn(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    if (start_datetime and end_datetime) and (past_days):
+        raise ValueError("Provide either a datetime window OR past n days, not both")
+
+    if not (start_datetime and end_datetime) and not (past_days):
+        raise ValueError("Provide either a datetime window OR past n days")
+
+    if not (start_datetime and end_datetime):
+        raise ValueError(
+            "A datetime window must consist of both a start and end datetime"
+        )
 
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
     if end_datetime.tzinfo is None:
         end_datetime = end_datetime.replace(tzinfo=TZ)
 
-    start_epoch = int(start_datetime.timestamp())
-    end_epoch = int(end_datetime.timestamp())
+    if past_days:
+        start_epoch = int((datetime.now(tz=TZ) - timedelta(days=past_days)).timestamp)
+        end_epoch = datetime.now(tz=TZ)
+    else:
+        start_epoch = int(start_datetime.timestamp())
+        end_epoch = int(end_datetime.timestamp())
+
+    conn = build_conn(DB_PATH)
+    conn.row_factory = sqlite3.Row
 
     try:
         report = conn.execute(
@@ -246,7 +301,9 @@ def get_nutrition_summary(
 
 @health_connect_mcp.tool
 def get_steps_summary(
-    start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime | None,
+    end_datetime: datetime | None,
+    past_days: int | None,
 ) -> list[dict[str, Any]]:
     """
     Retrieve daily step counts for a specific user within a date range.
@@ -258,6 +315,8 @@ def get_steps_summary(
             If no timezone is provided, the user's local timezone is assumed.
         end_datetime (ISO-8601): The end of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
+        past_days (int): Alternative to start/end datetimes. Specifies a lookback
+            window of the past N days from now. Mutually exclusive with start/end datetimes.
 
     Returns:
         A list of daily records, ordered chronologically:
@@ -265,13 +324,28 @@ def get_steps_summary(
         - count: number of steps
     """
 
+    if (start_datetime and end_datetime) and (past_days):
+        raise ValueError("Provide either a datetime window OR past n days, not both")
+
+    if not (start_datetime and end_datetime) and not (past_days):
+        raise ValueError("Provide either a datetime window OR past n days")
+
+    if not (start_datetime and end_datetime):
+        raise ValueError(
+            "A datetime window must consist of both a start and end datetime"
+        )
+
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
     if end_datetime.tzinfo is None:
         end_datetime = end_datetime.replace(tzinfo=TZ)
 
-    start_epoch = int(start_datetime.timestamp())
-    end_epoch = int(end_datetime.timestamp())
+    if past_days:
+        start_epoch = int((datetime.now(tz=TZ) - timedelta(days=past_days)).timestamp)
+        end_epoch = datetime.now(tz=TZ)
+    else:
+        start_epoch = int(start_datetime.timestamp())
+        end_epoch = int(end_datetime.timestamp())
 
     conn = build_conn(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -299,7 +373,9 @@ def get_steps_summary(
 
 @health_connect_mcp.tool
 def get_oxygen_saturation(
-    start_datetime: datetime, end_datetime: datetime
+    start_datetime: datetime | None,
+    end_datetime: datetime | None,
+    past_days: int | None,
 ) -> list[dict[str, Any]]:
     """
     Retrieve time-series blood oxygen saturation (SpO2) readings for a user within a specified time range.
@@ -312,19 +388,36 @@ def get_oxygen_saturation(
             If no timezone is provided, the user's local timezone is assumed.
         end_datetime (ISO-8601): The end of the time window to search.
             If no timezone is provided, the user's local timezone is assumed.
+        past_days (int): Alternative to start/end datetimes. Specifies a lookback
+            window of the past N days from now. Mutually exclusive with start/end datetimes.
 
     Returns:
         A list of chronological SpO2 records containing:
         - datetime: ISO 8601 formatted timestamp string in the local timezone.
         - percentage: Blood oxygen saturation level (0.0 - 100.0).
     """
+    if (start_datetime and end_datetime) and (past_days):
+        raise ValueError("Provide either a datetime window OR past n days, not both")
+
+    if not (start_datetime and end_datetime) and not (past_days):
+        raise ValueError("Provide either a datetime window OR past n days")
+
+    if not (start_datetime and end_datetime):
+        raise ValueError(
+            "A datetime window must consist of both a start and end datetime"
+        )
+
     if start_datetime.tzinfo is None:
         start_datetime = start_datetime.replace(tzinfo=TZ)
     if end_datetime.tzinfo is None:
         end_datetime = end_datetime.replace(tzinfo=TZ)
 
-    start_epoch = int(start_datetime.timestamp())
-    end_epoch = int(end_datetime.timestamp())
+    if past_days:
+        start_epoch = int((datetime.now(tz=TZ) - timedelta(days=past_days)).timestamp)
+        end_epoch = datetime.now(tz=TZ)
+    else:
+        start_epoch = int(start_datetime.timestamp())
+        end_epoch = int(end_datetime.timestamp())
 
     conn = build_conn(DB_PATH)
     conn.row_factory = sqlite3.Row
