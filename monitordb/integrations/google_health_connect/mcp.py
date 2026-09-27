@@ -59,7 +59,7 @@ def list_sleep_sessions(
     if not (start_datetime and end_datetime) and not (past_days):
         raise ValueError("Provide either a datetime window OR past n days")
 
-    if not (start_datetime and end_datetime):
+    if (start_datetime is None) != (end_datetime is None):
         raise ValueError(
             "A datetime window must consist of both a start and end datetime"
         )
@@ -161,7 +161,7 @@ def get_heart_rate_summary(
     if not (start_datetime and end_datetime) and not (past_days):
         raise ValueError("Provide either a datetime window OR past n days")
 
-    if not (start_datetime and end_datetime):
+    if (start_datetime is None) != (end_datetime is None):
         raise ValueError(
             "A datetime window must consist of both a start and end datetime"
         )
@@ -251,7 +251,7 @@ def get_nutrition_summary(
     if not (start_datetime and end_datetime) and not (past_days):
         raise ValueError("Provide either a datetime window OR past n days")
 
-    if not (start_datetime and end_datetime):
+    if (start_datetime is None) != (end_datetime is None):
         raise ValueError(
             "A datetime window must consist of both a start and end datetime"
         )
@@ -330,7 +330,7 @@ def get_steps_summary(
     if not (start_datetime and end_datetime) and not (past_days):
         raise ValueError("Provide either a datetime window OR past n days")
 
-    if not (start_datetime and end_datetime):
+    if (start_datetime is None) != (end_datetime is None):
         raise ValueError(
             "A datetime window must consist of both a start and end datetime"
         )
@@ -402,7 +402,7 @@ def get_oxygen_saturation(
     if not (start_datetime and end_datetime) and not (past_days):
         raise ValueError("Provide either a datetime window OR past n days")
 
-    if not (start_datetime and end_datetime):
+    if (start_datetime is None) != (end_datetime is None):
         raise ValueError(
             "A datetime window must consist of both a start and end datetime"
         )
